@@ -125,8 +125,9 @@ test2()
     for(i = 0; i < 1000*500000; i++){
       if((i % 1000000) == 0)
         write(2, ".", 1);
-      if(count > 0)
+      if(count > 0){
         break;
+      }
     }
     if (count == 0) {
       printf("\ntest2 failed: alarm not called\n");

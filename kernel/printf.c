@@ -132,3 +132,17 @@ printfinit(void)
   initlock(&pr.lock, "pr");
   pr.locking = 1;
 }
+
+void backtrace(void){
+  printf("backtrace:\n");
+  uint64 fp=r_fp();
+  uint64 kstack=myproc()->kstack;
+  while(PGROUNDDOWN(fp)==kstack){
+    uint64 *return_addr=(uint64*)(fp-8);
+    //-8B ==*fp-1
+    uint64 *fp_addr=(uint64*)(fp-16);
+    //==*fp-2
+    printf("%p\n",*return_addr);
+    fp=*fp_addr;
+  }
+}
