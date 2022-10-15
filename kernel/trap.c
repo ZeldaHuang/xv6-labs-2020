@@ -72,6 +72,7 @@ usertrap(void)
     if(fault_num==13||fault_num==15){
       uint64 beg_addr=PGROUNDDOWN(r_stval());
       pagetable_t pagetable=p->pagetable;
+      vmprint(pagetable);
       char *mem = kalloc();
       if(mem!=0){
         memset(mem, 0, PGSIZE);
@@ -82,6 +83,7 @@ usertrap(void)
           printf("...\n");
           p->sz+=PGSIZE;
           p->trapframe->epc=r_sepc()-4;
+          vmprint(pagetable);
         }
       }
     }
