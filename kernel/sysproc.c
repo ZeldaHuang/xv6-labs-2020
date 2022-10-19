@@ -46,9 +46,20 @@ sys_sbrk(void)
 
   if(argint(0, &n) < 0)
     return -1;
-  addr = myproc()->sz;
-  myproc()->sz+=n;
   
+  addr = myproc()->sz;
+  if(n>0){
+    if(addr+n>MAXVA-2*PGSIZE){
+      return -1;
+    }
+    myproc()->sz=addr+n;
+  }
+  else if(n<0){
+    if(addr+n<PGROUNDDOWN(myproc()->trapframe->sp)+PGSIZE){
+      return -1;
+    }
+    myproc()->sz = uvmdealloc(myproc()->pagetable, addr, addr + n);
+  }
   // if(growproc(n) < 0)
   //   return -1;
   
