@@ -15,6 +15,7 @@ extern char etext[];  // kernel.ld sets this to end of kernel code.
 
 extern char trampoline[]; // trampoline.S
 
+extern int reference_count[];
 /*
  * create a direct-map page table for the kernel.
  */
@@ -320,14 +321,18 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    flags &= ~PTE_W
     // if((mem = kalloc()) == 0)
     //   goto err;
     // memmove(mem, (char*)pa, PGSIZE);
-    mem=pa;
+    // printf("va:%p\n",i);
+    reference_count[pa/PGSIZE]++;
+    mem=(char*)pa;
+    flags &= ~PTE_W;
     if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      // kfree(mem);
-      // goto err;
+      printf("error\n");
+      kfree(mem);
+      goto err;
+      continue;
     }
   }
   return 0;
@@ -357,9 +362,17 @@ int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
   uint64 n, va0, pa0;
-
+  printf("copyout\n");
+  pte_t pte;
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
+    pa0 = walkaddr(pagetable, va0);
+    pte = PA2PTE(pa0);
+    if(((pte)&PTE_W)>0){
+      if(cow(va0)==0){
+        return -1;
+      }
+    }
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0)
       return -1;
