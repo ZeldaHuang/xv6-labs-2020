@@ -370,15 +370,16 @@ int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
   uint64 n,pa0,va0;
-  
+  if (dstva > MAXVA - len) return -1; 
   pte_t *pte;
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
     pa0 = walkaddr(pagetable, va0);
     pte = walk(pagetable,va0,0);
     // printf("copy pte %d\n",((*pte)&PTE_W));
+    if (pte == 0) return -1;
     if(((PTE_FLAGS(*pte))&PTE_W)==0){
-      printf("copyout\n");
+      // printf("copyout\n");
       if(cow(pagetable,va0)==0){
         return -1;
       }

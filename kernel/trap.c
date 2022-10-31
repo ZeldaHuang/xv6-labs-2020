@@ -47,6 +47,7 @@ uint64 cow(pagetable_t pagetable,uint64 va){
       memmove((void*)mem, (void*)pa, PGSIZE);
       uvmunmap(pagetable, PGROUNDDOWN(va), 1, 1);
       flags &= ~PTE_COW;
+      // ((va>=p->sz||va>=MAXVA||va<PGROUNDDOWN(p->trapframe->sp)+PGSIZE))||
       if(mappages(pagetable, PGROUNDDOWN(va), PGSIZE, (uint64)mem, flags|PTE_W) != 0){
         kfree(mem);
         return 0;
