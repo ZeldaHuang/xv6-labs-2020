@@ -29,20 +29,25 @@ trapinithart(void)
   w_stvec((uint64)kernelvec);
 }
 
-uint64 cow(uint64 va){
+uint64 cow(pagetable_t pagetable,uint64 va){
  // printf("page:%p\n",va);
-    pagetable_t pagetable=myproc()->pagetable;
     // vmprint(pagetable);
-    printf("cow\n");
-    printf("%p\n",va);
-    va=PGROUNDDOWN(va);
-    printf("%p\n",va);
-    uvmunmap(pagetable, va, 1, 1);
+    // printf("cow\n");
+    // printf("%p\n",va);
+    // va=PGROUNDDOWN(va);
+    // printf("%p\n",va);
+    pte_t *pte = walk(pagetable, va, 0);
+    uint flags=PTE_FLAGS(*pte);
+    if(!(flags&PTE_COW)){
+      return 0;
+    }
     char *mem = kalloc();
     if(mem!=0){
-      memset(mem, 0, PGSIZE);
-      if(((va>=myproc()->sz||va>=MAXVA||va<PGROUNDDOWN(myproc()->trapframe->sp)+PGSIZE))||
-        mappages(pagetable, PGROUNDDOWN(va), PGSIZE, (uint64)mem, PTE_W|PTE_R|PTE_U) != 0){
+      uint64 pa = walkaddr(pagetable, PGROUNDDOWN(va));
+      memmove((void*)mem, (void*)pa, PGSIZE);
+      uvmunmap(pagetable, PGROUNDDOWN(va), 1, 1);
+      flags &= ~PTE_COW;
+      if(mappages(pagetable, PGROUNDDOWN(va), PGSIZE, (uint64)mem, flags|PTE_W) != 0){
         kfree(mem);
         return 0;
       }
@@ -93,9 +98,11 @@ usertrap(void)
   } else if((which_dev = devintr()) != 0){
     // ok
   } 
-  else if (r_scause() == 13||r_scause() == 15){
+  else if (r_scause() == 15){
     uint64 va=r_stval();
-    if(cow(va)==0){
+    if(cow(p->pagetable,va)==0){
+      printf("%p\n",walkaddr(p->pagetable,va));
+      // vmprint(p->pagetable);
       printf("cow failed\n");
       printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
       printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
@@ -103,7 +110,6 @@ usertrap(void)
     }
   }
   else {
-
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;

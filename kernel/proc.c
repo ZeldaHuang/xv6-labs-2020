@@ -333,10 +333,8 @@ void
 exit(int status)
 {
   struct proc *p = myproc();
-
   if(p == initproc)
     panic("init exiting");
-
   // Close all open files.
   for(int fd = 0; fd < NOFILE; fd++){
     if(p->ofile[fd]){
@@ -350,7 +348,6 @@ exit(int status)
   iput(p->cwd);
   end_op();
   p->cwd = 0;
-
   // we might re-parent a child to init. we can't be precise about
   // waking up init, since we can't acquire its lock once we've
   // acquired any other proc lock. so wake up init whether that's
@@ -359,7 +356,6 @@ exit(int status)
   acquire(&initproc->lock);
   wakeup1(initproc);
   release(&initproc->lock);
-
   // grab a copy of p->parent, to ensure that we unlock the same
   // parent we locked. in case our parent gives us away to init while
   // we're waiting for the parent lock. we may then race with an
@@ -369,7 +365,6 @@ exit(int status)
   acquire(&p->lock);
   struct proc *original_parent = p->parent;
   release(&p->lock);
-  
   // we need the parent's lock in order to wake it up from wait().
   // the parent-then-child rule says we have to lock it first.
   acquire(&original_parent->lock);
@@ -386,7 +381,6 @@ exit(int status)
   p->state = ZOMBIE;
 
   release(&original_parent->lock);
-
   // Jump into the scheduler, never to return.
   sched();
   panic("zombie exit");

@@ -104,10 +104,15 @@ walkaddr(pagetable_t pagetable, uint64 va)
   pte = walk(pagetable, va, 0);
   if(pte == 0)
     return 0;
-  if((*pte & PTE_V) == 0)
+  if((*pte & PTE_V) == 0){
+    printf("fdsaf  %p\n",*pte);
     return 0;
+  }
   if((*pte & PTE_U) == 0)
+  {
+    printf("%p\n",*pte);
     return 0;
+  }
   pa = PTE2PA(*pte);
   return pa;
 }
@@ -312,7 +317,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
+  // char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
@@ -324,16 +329,19 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     // if((mem = kalloc()) == 0)
     //   goto err;
     // memmove(mem, (char*)pa, PGSIZE);
-    // printf("va:%p\n",i);
-    reference_count[pa/PGSIZE]++;
-    mem=(char*)pa;
+    // printf("%d\n",reference_count[pa/PGSIZE]);
     flags &= ~PTE_W;
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
+    flags |= PTE_COW;
+    if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
       printf("error\n");
-      kfree(mem);
+      // kfree(mem);
       goto err;
       continue;
     }
+    reference_count[pa/PGSIZE]++;
+    // printf("%d\n",reference_count[pa/PGSIZE]);
+    *pte &= ~PTE_W;
+    *pte |= PTE_COW;
   }
   return 0;
 
@@ -361,15 +369,17 @@ uvmclear(pagetable_t pagetable, uint64 va)
 int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
-  uint64 n, va0, pa0;
-  printf("copyout\n");
-  pte_t pte;
+  uint64 n,pa0,va0;
+  
+  pte_t *pte;
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
     pa0 = walkaddr(pagetable, va0);
-    pte = PA2PTE(pa0);
-    if(((pte)&PTE_W)>0){
-      if(cow(va0)==0){
+    pte = walk(pagetable,va0,0);
+    // printf("copy pte %d\n",((*pte)&PTE_W));
+    if(((PTE_FLAGS(*pte))&PTE_W)==0){
+      printf("copyout\n");
+      if(cow(pagetable,va0)==0){
         return -1;
       }
     }
@@ -454,4 +464,35 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+void printprefix(int dep){
+  printf("..");
+  for(int i = 0; i < dep; i++){
+    printf(" ..");
+  }
+}
+void printwalk(pagetable_t pagetable,int dep){
+  for(int i = 0; i < 512; i++){
+    pte_t pte = pagetable[i];
+    if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
+      // this PTE points to a lower-level page table.
+      uint64 child = PTE2PA(pte);
+      printprefix(dep);
+      printf("%d: ",i);
+      printf("pte %p pa %p\n",pte,child);
+      printwalk((pagetable_t)child,dep+1);
+    }
+    else if(pte & PTE_V){
+      uint64 physical_addr=PTE2PA(pte);
+      printprefix(dep);
+      printf("%d: ",i);
+      printf("pte %p pa %p\n",pte,physical_addr);
+    }
+  }
+}
+void vmprint(pagetable_t pagetable){
+   // there are 2^9 = 512 PTEs in a page table.
+  printf("page table %p\n",pagetable);
+  printwalk(pagetable,0);
 }
