@@ -282,6 +282,27 @@ create(char *path, short type, short major, short minor)
 
   return ip;
 }
+struct inode* get_symlink_ip(char *path,uint depth){
+  if(depth>10){
+    return 0;
+  }
+  struct inode *ip;
+  if((ip=namei(path))==0){
+    return 0;
+  }
+  ilock(ip);
+  if(ip->type==T_SYMLINK){
+    char nxt_path[MAXPATH];
+    if(readi(ip,0,(uint64)nxt_path,ip->size-MAXPATH,MAXPATH)==0){
+      iunlock(ip);
+      return 0;
+    }
+    iunlock(ip);
+    return get_symlink_ip(nxt_path,depth+1);
+  }
+  iunlock(ip);
+  return ip;
+}
 
 uint64
 sys_open(void)
@@ -304,7 +325,14 @@ sys_open(void)
       return -1;
     }
   } else {
-    if((ip = namei(path)) == 0){
+    if(!(omode&O_NOFOLLOW)){
+      // printf("....\n");
+      if((ip = get_symlink_ip(path,0)) == 0){
+        end_op();
+        return -1;
+      }
+    }
+    else if((ip = namei(path)) == 0){
       end_op();
       return -1;
     }
@@ -483,4 +511,58 @@ sys_pipe(void)
     return -1;
   }
   return 0;
+}
+
+uint64 sys_symlink(void){
+  char path[MAXPATH], target[MAXPATH], name[DIRSIZ];
+  uint flag_incre_link=0;
+  if(argstr(0, target, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0){
+    return -1;
+  }
+  struct inode *ip,*dp;
+  begin_op();
+  // if((ip = namei(old)) == 0){
+  //   end_op();
+  //   return -1;
+  // }
+  if((ip = namei(target)) != 0&&ip->type!=T_DIR){
+    flag_incre_link=1;
+    ilock(ip);
+    ip->nlink++;
+    iupdate(ip);
+    iunlockput(ip);
+  }
+
+  if((dp=namei(path))==0){
+    if(nameiparent(path,name)==0){
+      printf("partent doesn't exist\n");
+      goto bad;
+    }
+    else{
+      if((dp=create(path,T_SYMLINK,0,0))==0){
+        printf("create symlink inode failed\n");
+        goto bad;
+      }
+      else{
+        iunlock(dp);
+      }
+    }
+  }
+  ilock(dp);
+  writei(dp,0,(uint64)target,dp->size,MAXPATH);
+  dp->type=T_SYMLINK;
+  iunlockput(dp);
+  end_op();
+
+  return 0;
+
+bad:
+  if(flag_incre_link){
+    ilock(ip);
+    ip->nlink--;
+    iupdate(ip);
+    iunlockput(ip);
+  }
+  end_op();
+  return -1;
 }
